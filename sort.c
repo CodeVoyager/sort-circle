@@ -12,10 +12,10 @@
 #include "font.h"
 
 #define S     800           // video size
-#define N     360           // number of points
-#define R0    (N / 180.0f)  // circle inner radius
-#define R1    (N / 90.0f)   // circle outer radius
-#define PAD   (N / 64)      // message padding
+#define N     360           // number of dots
+#define R0    (S / 400.0f)  // dot inner radius
+#define R1    (S / 200.0f)  // dot outer radius
+#define PAD   (S / 128)     // message padding
 #define WAIT  1             // pause in seconds between sorts
 #define HZ    44100         // audio sample rate
 #define FPS   60            // output framerate
@@ -75,22 +75,22 @@ smoothstep(float lower, float upper, float x)
     return x * x * (3.0f - 2.0f * x);
 }
 
-/* Convert 24-bit color to pseudo sRGB. */
+/* Convert 24-bit color to RGB. */
 static void
 rgb_split(unsigned long c, float *r, float *g, float *b)
 {
-    *r = sqrtf((c >> 16) / 255.0f);
-    *g = sqrtf(((c >> 8) & 0xff) / 255.0f);
-    *b = sqrtf((c & 0xff) / 255.0f);
+    *r = ((c >> 16) / 255.0f);
+    *g = (((c >> 8) & 0xff) / 255.0f);
+    *b = ((c & 0xff) / 255.0f);
 }
 
-/* Convert pseudo sRGB to 24-bit color. */
+/* Convert RGB to 24-bit color. */
 static unsigned long
 rgb_join(float r, float g, float b)
 {
-    unsigned long ir = roundf(r * r * 255.0f);
-    unsigned long ig = roundf(g * g * 255.0f);
-    unsigned long ib = roundf(b * b * 255.0f);
+    unsigned long ir = roundf(r * 255.0f);
+    unsigned long ig = roundf(g * 255.0f);
+    unsigned long ib = roundf(b * 255.0f);
     return (ir << 16) | (ig << 8) | ib;
 }
 
@@ -120,13 +120,19 @@ ppm_get(unsigned char *buf, int x, int y)
 }
 
 static void
-ppm_circle(unsigned char *buf, float x, float y, unsigned long fgc)
+ppm_dot(unsigned char *buf, float x, float y, unsigned long fgc)
 {
     float fr, fg, fb;
     rgb_split(fgc, &fr, &fg, &fb);
-    for (int py = floorf(y - R1 - 1); py <= ceilf(y + R1 + 1); py++) {
+
+    int miny = floorf(y - R1 - 1);
+    int maxy = ceilf(y + R1 + 1);
+    int minx = floorf(x - R1 - 1);
+    int maxx = ceilf(x + R1 + 1);
+
+    for (int py = miny; py <= maxy; py++) {
         float dy = py - y;
-        for (int px = floorf(x - R1 - 1); px <= ceilf(x + R1 + 1); px++) {
+        for (int px = minx; px <= maxx; px++) {
             float dx = px - x;
             float d = sqrtf(dy * dy + dx * dx);
             float a = smoothstep(R1, R0, d);
@@ -206,7 +212,7 @@ frame(void)
         float r = S * 15.0f / 32.0f * (1.0f - delta);
         float px = r * x + S / 2.0f;
         float py = r * y + S / 2.0f;
-        ppm_circle(buf, px, py, hue(array[i]));
+        ppm_dot(buf, px, py, hue(array[i]));
     }
     if (message)
         for (int c = 0; message[c]; c++)
@@ -308,7 +314,7 @@ sort_insertion(int array[N])
 }
 
 static void
-sort_stoogesort(int array[N], int i, int j)
+sort_stoogesort(int *array, int i, int j)
 {
     static int c = 0;
     if (array[i] > array[j]) {
@@ -354,7 +360,7 @@ digit(int v, int b, int d)
 }
 
 static void
-sort_radix_lsd(int *array, int b)
+sort_radix_lsd(int array[N], int b)
 {
     int c, total = 1;
     for (int d = 0; total; d++) {
